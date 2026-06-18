@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>대화 지도 · v0.1</title>
+<style>
+  :root {
+    --bg:           #262624;
+    --bg-elevated:  #2F2E2C;
+    --bg-soft:      #30302E;
+    --input-bg:     #30302E;
+    --user-bubble:  #3A3937;
+    --text:         #ECECE9;
+    --text-soft:    #B8B6B0;
+    --text-faint:   #84827D;
+    --text-mute:    #5C5A55;
+    --border:       #3A3937;
+    --accent:       #D97757;
+    --accent-soft:  #4A2E22;
+    --accent-faint: #6B3F2C;
+    --accent-deep:  #C96342;
+    --node-fill:    #D97757;
+    --edge-default: #5A5855;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-serif, 'Tiempos Text', 'Charter', 'Georgia', serif;
+    font-size: 16px;
+    line-height: 1.65;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── 헤더 ── */
+  header {
+    height: 48px; display: flex; align-items: center; padding: 0 16px; flex-shrink: 0;
+  }
+  .traffic-lights { display: flex; gap: 8px; margin-right: 12px; }
+  .traffic-lights .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .traffic-lights .dot.red { background: #ED6A5E; }
+  .traffic-lights .dot.yellow { background: #F5BF4F; }
+  .traffic-lights .dot.green { background: #62C554; }
+  .header-icon-btn {
+    width: 32px; height: 32px; border: none; background: transparent; color: var(--text-soft);
+    cursor: pointer; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }
+  .header-icon-btn:hover { background: var(--bg-elevated); color: var(--text); }
+  .header-icon-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .header-spacer { flex: 1; }
+
+  /* ── 메인 ── */
+  main { flex: 1; display: flex; overflow: hidden; position: relative; }
+  .chat-area { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+
+  /* 홈 화면 */
+  .home-screen {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px;
+  }
+  .home-screen.hidden { display: none; }
+  .greeting {
+    font-size: 32px; font-weight: 400; color: var(--text); margin-bottom: 36px;
+    display: flex; align-items: center; gap: 14px;
+    font-family: ui-serif, 'Tiempos Headline', 'Tiempos Text', serif;
+  }
+  .greeting .star { width: 28px; height: 28px; flex-shrink: 0; }
+  .home-sub {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 13px; color: var(--text-faint);
+    margin-bottom: 28px; margin-top: -20px;
+  }
+
+  .input-wrap { width: 100%; max-width: 720px; padding: 0 24px; margin: 0 auto; }
+  .input-inner {
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 24px;
+    padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 10px;
+    transition: border-color 0.15s; cursor: text;
+  }
+  .input-inner:hover { border-color: #4A4845; }
+  .input-inner:focus-within { border-color: #5A5855; }
+  .input-inner textarea {
+    width: 100%; border: none; background: transparent; resize: none; font-family: inherit;
+    font-size: 16px; color: var(--text); outline: none; line-height: 1.5; min-height: 28px; max-height: 200px;
+  }
+  .input-inner textarea::placeholder { color: var(--text-mute); }
+  .input-controls { display: flex; align-items: center; gap: 6px; }
+  .ctrl-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-soft);
+    width: 28px; height: 28px; border-radius: 50%; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; position: relative;
+  }
+  .ctrl-btn:hover { background: var(--bg-elevated); color: var(--text); }
+  .ctrl-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .model-label {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 12px; color: var(--text-soft);
+    margin-left: auto; margin-right: 6px; padding: 4px 8px; border-radius: 6px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px; transition: background 0.15s;
+  }
+  .model-label:hover { background: var(--bg-elevated); }
+  .send-btn {
+    background: var(--text); color: var(--bg); border: none; border-radius: 50%;
+    width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center;
+    justify-content: center; transition: background 0.15s, transform 0.1s;
+  }
+  .send-btn:hover { background: #DDDBD6; }
+  .send-btn:active { transform: scale(0.96); }
+  .send-btn svg { width: 14px; height: 14px; stroke: var(--bg); fill: none; stroke-width: 2; }
+
+  .map-toggle-btn.active { background: var(--accent-soft); border-color: var(--accent-faint); color: var(--accent); }
+  .map-toggle-btn .badge {
+    position: absolute; top: -2px; right: -2px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); opacity: 0; transition: opacity 0.2s;
+  }
+  .map-toggle-btn.has-update .badge { opacity: 1; }
+
+  .quick-actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+  .quick-action {
+    display: flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--border);
+    color: var(--text-soft); padding: 8px 14px; border-radius: 999px; font-family: 'Söhne', system-ui, sans-serif;
+    font-size: 13px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  }
+  .quick-action:hover { background: var(--bg-elevated); border-color: #4A4845; }
+  .quick-action svg { width: 14px; height: 14px; }
+
+  /* 채팅 모드 */
+  .chat-mode { flex: 1; display: none; flex-direction: column; min-height: 0; }
+  .chat-mode.active { display: flex; }
+  .messages { flex: 1; overflow-y: auto; padding: 32px 0 24px; scroll-behavior: smooth; }
+  .messages::-webkit-scrollbar { width: 8px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* 질문-답 쌍을 주황 사각형으로 묶음 */
+  .qa-pair {
+    max-width: 720px; margin: 0 auto 18px auto; padding: 0 24px;
+  }
+  .qa-box {
+    border: 1.5px solid var(--accent-faint);
+    border-radius: 14px;
+    background: rgba(217, 119, 87, 0.04);
+    padding: 4px 16px 14px;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .qa-pair.highlighted .qa-box {
+    border-color: var(--accent);
+    background: rgba(217, 119, 87, 0.10);
+  }
+  .qa-pair.flash .qa-box {
+    border-color: var(--accent);
+    background: rgba(217, 119, 87, 0.16);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .qa-tag {
+    display: inline-block; font-family: 'Söhne', system-ui, sans-serif; font-size: 10px;
+    color: var(--accent); letter-spacing: 0.5px; font-weight: 600; margin: 10px 0 2px;
+    text-transform: uppercase;
+  }
+  .msg { padding: 6px 0; }
+  .msg .role {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 11px; color: var(--text-faint);
+    margin-bottom: 2px; font-weight: 600;
+  }
+  .msg .bubble { font-size: 15px; line-height: 1.6; color: var(--text); }
+  .msg.user .bubble { color: var(--text); }
+  .msg.assistant .bubble { color: var(--text-soft); }
+
+  .input-area-chat { padding: 12px 0 24px; background: var(--bg); flex-shrink: 0; }
+
+  /* 입력창 위 툴바 (지도 토글 위치) */
+  .input-toolbar {
+    width: 100%; max-width: 720px; margin: 0 auto 8px; padding: 0 24px;
+    display: flex; justify-content: flex-end;
+  }
+  .map-toggle-bar {
+    display: flex; align-items: center; gap: 6px;
+    background: transparent; border: 1px solid var(--border); color: var(--text-soft);
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; position: relative;
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 12px;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .map-toggle-bar:hover { background: var(--bg-elevated); color: var(--text); }
+  .map-toggle-bar.active { background: var(--accent-soft); border-color: var(--accent-faint); color: var(--accent); }
+  .map-toggle-bar svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .map-toggle-bar .badge {
+    position: absolute; top: -2px; right: -2px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); opacity: 0; transition: opacity 0.2s;
+  }
+  .map-toggle-bar.has-update .badge { opacity: 1; }
+
+  .qa-pair.appearing { animation: msg-in 0.35s ease-out; }
+  @keyframes msg-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .typing-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: dot-bounce 1.2s infinite ease-in-out; }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dot-bounce { 0%,80%,100% { transform: scale(0.6); opacity: 0.5; } 40% { transform: scale(1); opacity: 1; } }
+
+  /* ── 우측 지도 패널 (드로어) ── */
+  .map-panel {
+    width: 0; flex-shrink: 0; background: var(--bg-elevated); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+    transition: width 0.28s cubic-bezier(0.32,0.72,0,1);
+  }
+  .map-panel.open { width: 560px; }
+
+  .map-panel-header {
+    display: flex; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0; gap: 10px;
+  }
+  .map-panel-title {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 13px; font-weight: 600; color: var(--text);
+    white-space: nowrap;
+  }
+  .map-panel-hint {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 10px; color: var(--text-faint);
+    white-space: nowrap;
+  }
+  .map-panel-close {
+    margin-left: auto; background: transparent; border: none; color: var(--text-faint); cursor: pointer;
+    width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s; flex-shrink: 0;
+  }
+  .map-panel-close:hover { background: var(--bg-soft); color: var(--text); }
+  .map-panel-close svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  .map-canvas-wrap { flex: 1; position: relative; overflow: hidden; }
+  #map-svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: default; }
+  #map-svg.connecting { cursor: crosshair; }
+
+  .map-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 12px; color: var(--text-mute);
+    text-align: center; padding: 0 32px; line-height: 1.7;
+  }
+
+  /* 지도 노드 (원 + 키워드) */
+  .map-node { cursor: grab; }
+  .map-node.dragging { cursor: grabbing; }
+  .map-node circle {
+    fill: var(--node-fill);
+    transition: fill 0.2s;
+  }
+  .map-node:hover circle { fill: var(--accent-deep); }
+  .map-node.selected circle { stroke: var(--text); stroke-width: 2; }
+  /* 최근 대화 노드만 흰 테두리로 강조 (첫 대화는 라벨로만 표시) */
+  .map-node.recent circle { stroke: #fff; stroke-width: 2; }
+  .map-node .kw {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 10px; fill: var(--text-soft);
+    pointer-events: none; font-weight: 500;
+  }
+  .map-node.recent .kw { fill: #fff; font-weight: 600; }
+  .map-node .anchor-label {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 9px; fill: var(--text-faint);
+    pointer-events: none; font-weight: 600; letter-spacing: 0.3px;
+  }
+  .map-node.recent .anchor-label { fill: #fff; }
+  /* 사용자 그룹 배경 (올가미로 생성) */
+  .group-bg {
+    fill: none;
+    stroke: rgba(217, 119, 87, 0.45);
+    stroke-width: 1.2;
+    stroke-dasharray: 5 4;
+    pointer-events: none;
+  }
+  .group-name {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+    fill: var(--accent); cursor: text;
+  }
+  .group-name:hover { text-decoration: underline; }
+  /* 올가미 */
+  .lasso-path { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; pointer-events: none; }
+  .lasso-path.closing { fill: none; stroke-width: 2; stroke-dasharray: none; }
+  #map-svg.lasso { cursor: crosshair; }
+
+  .map-edge {
+    stroke: var(--edge-default); stroke-width: 1.5; transition: stroke 0.2s;
+  }
+  .map-edge.user-made { stroke: var(--accent); stroke-width: 2; }
+  .map-edge:hover { stroke: var(--text-soft); }
+  /* 연결 중 임시 선 */
+  .map-edge-temp { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; pointer-events: none; }
+
+  /* 키워드 편집 input (HTML 오버레이) */
+  .kw-editor {
+    position: absolute; transform: translate(-50%, -50%);
+    background: var(--bg-soft); border: 1px solid var(--accent); border-radius: 6px;
+    color: var(--text); font-family: 'Söhne', system-ui, sans-serif; font-size: 11px;
+    padding: 3px 8px; text-align: center; outline: none; z-index: 50; width: 110px;
+  }
+  .group-name-editor {
+    position: absolute;
+    background: var(--bg-soft); border: 1px solid var(--accent); border-radius: 6px;
+    color: var(--accent); font-family: 'Söhne', system-ui, sans-serif; font-size: 11px; font-weight: 600;
+    padding: 3px 8px; outline: none; z-index: 50; width: 120px;
+  }
+
+  /* 하단 도구 바 */
+  .map-tools {
+    display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .map-tool-btn {
+    display: flex; align-items: center; gap: 5px; background: transparent; border: 1px solid var(--border);
+    color: var(--text-soft); padding: 6px 10px; border-radius: 8px;
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 11px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .map-tool-btn:hover { background: var(--bg-soft); color: var(--text); }
+  .map-tool-btn.active { background: var(--accent-soft); border-color: var(--accent-faint); color: var(--accent); }
+  .map-tool-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .map-tools .spacer { flex: 1; }
+  .map-legend {
+    display: flex; align-items: center; gap: 12px; font-family: 'Söhne', system-ui, sans-serif;
+    font-size: 9.5px; color: var(--text-faint);
+  }
+  .map-legend .li { display: flex; align-items: center; gap: 4px; }
+  .map-legend .dot-s { width: 8px; height: 8px; border-radius: 50%; background: var(--node-fill); }
+  .map-legend .dot-recent {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--node-fill);
+    border: 1.5px solid #fff;
+  }
+  .map-legend .li:last-child { color: #fff; font-weight: 600; }
+
+  /* 호버 디테일 카드 */
+  .detail-card {
+    position: fixed; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px;
+    padding: 13px 15px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); max-width: 260px; z-index: 100;
+    pointer-events: none; opacity: 0; transition: opacity 0.15s; font-family: 'Söhne', system-ui, sans-serif;
+  }
+  .detail-card.visible { opacity: 1; }
+  .detail-card .dc-tag { font-size: 10px; color: var(--accent); font-weight: 600; margin-bottom: 6px; letter-spacing: 0.3px; }
+  .detail-card .dc-q { font-size: 12.5px; color: var(--text); font-weight: 500; margin-bottom: 8px; line-height: 1.5; }
+  .detail-card .dc-preview { font-size: 11px; color: var(--text-soft); line-height: 1.55; border-top: 1px solid var(--border); padding-top: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="traffic-lights">
+    <div class="dot red"></div><div class="dot yellow"></div><div class="dot green"></div>
+  </div>
+  <button class="header-icon-btn" aria-label="사이드바">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h16" stroke-linecap="round"/></svg>
+  </button>
+  <div class="header-spacer"></div>
+</header>
+
+<main>
+  <section class="chat-area">
+    <!-- 홈 화면 -->
+    <div class="home-screen" id="home-screen">
+      <div class="greeting">
+        <svg class="star" viewBox="0 0 24 24" fill="#D97757">
+          <path d="M12 1.5l1.8 7.7L21.5 12l-7.7 1.8L12 21.5l-1.8-7.7L2.5 12l7.7-1.8L12 1.5z"/>
+        </svg>
+        <span>무엇이 궁금하세요?</span>
+      </div>
+      <div class="home-sub">질문할수록, 대화가 지도로 그려집니다.</div>
+      <div class="input-wrap">
+        <div class="input-inner" id="home-input-inner">
+          <textarea id="input" rows="1" placeholder="논문이나 개념에 대해 물어보세요"></textarea>
+          <div class="input-controls">
+            <button class="ctrl-btn" aria-label="추가">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+            </button>
+            <span class="model-label">
+              Claude
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </span>
+            <button class="send-btn" id="send" aria-label="전송">
+              <svg viewBox="0 0 16 16"><path d="M8 13V3 M3 8l5-5 5 5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="quick-actions">
+          <button class="quick-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 3l5 5L8 21H3v-5L16 3z" stroke-linejoin="round"/></svg>작성하기</button>
+          <button class="quick-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l10 5-10 5-10-5 10-5zM4 12v5l8 4 8-4v-5" stroke-linejoin="round"/></svg>학습하기</button>
+          <button class="quick-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6" stroke-linecap="round" stroke-linejoin="round"/></svg>코드</button>
+          <button class="quick-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 8h1a4 4 0 0 1 0 8h-1M3 8h14v9a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8z" stroke-linejoin="round"/></svg>일상생활</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 채팅 모드 -->
+    <div class="chat-mode" id="chat-mode">
+      <div class="messages" id="messages"></div>
+      <div class="input-area-chat">
+        <div class="input-toolbar">
+          <button class="map-toggle-bar" id="map-toggle-btn" aria-label="대화 지도 보기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="7" r="2.2"/><circle cx="12" cy="13" r="2.6"/>
+              <circle cx="7" cy="19" r="2.2"/><circle cx="18" cy="18" r="2.2"/>
+              <path d="M8 7l2.2 4.5M16 8l-2.4 3.6M10.5 14.5L8.3 17.4M14 15l3 2.4"/>
+            </svg>
+            대화 지도
+            <span class="badge"></span>
+          </button>
+        </div>
+        <div class="input-wrap">
+          <div class="input-inner" id="chat-input-inner"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 우측 지도 패널 -->
+  <aside class="map-panel" id="map-panel">
+    <div class="map-panel-header">
+      <span class="map-panel-title">대화 지도</span>
+      <span class="map-panel-hint">드래그 이동 · 더블클릭 키워드 수정</span>
+      <button class="map-panel-close" id="map-panel-close" aria-label="닫기">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M6 18L18 6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="map-canvas-wrap" id="map-canvas-wrap">
+      <div class="map-empty" id="map-empty">질문을 시작하면<br>대화가 지도에 그려집니다.</div>
+      <svg id="map-svg"></svg>
+    </div>
+    <div class="map-tools">
+      <button class="map-tool-btn" id="connect-tool">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8 8l8 8"/></svg>
+        연결
+      </button>
+      <button class="map-tool-btn" id="group-tool">
+        <svg viewBox="0 0 24 24"><path d="M4 8a4 8 0 0 0 0 8M20 8a4 8 0 0 1 0 8" stroke-linecap="round"/><circle cx="9" cy="12" r="1.5"/><circle cx="14" cy="12" r="1.5"/></svg>
+        그룹
+      </button>
+      <div class="spacer"></div>
+      <div class="map-legend">
+        <span class="li"><span class="dot-s"></span>대화</span>
+        <span class="li"><span class="dot-recent"></span>최근 대화</span>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<!-- 호버 디테일 카드 -->
+<div class="detail-card" id="detail-card">
+  <div class="dc-tag" id="dc-tag"></div>
+  <div class="dc-q" id="dc-q"></div>
+  <div class="dc-preview" id="dc-preview"></div>
+</div>
+
+<script>
+  // ─── 상태 ──────────────────────────────────────────────
+  let convos = [];
+  let edges = [];
+  let convoById = {};
+  let convoCounter = 0;
+  let firstId = null, lastId = null;
+  let selectedId = null;
+  let connectMode = false;
+  let connectFromId = null;
+  let simStabilized = false;
+
+  // 사용자 그룹 (올가미로 생성)
+  let userGroups = [];        // { id, name, nodeIds[] }
+  let groupCounter = 0;
+  let lassoMode = false;      // 올가미 모드 on/off
+  let lassoPts = [];          // 올가미 그리는 중 점들
+
+  // ─── 키워드 추출 ───────────────────────────────────────
+  function extractKeywords(text, n) {
+    const stop = new Set(['이','그','저','의','를','는','은','에','와','과','도','만','로','으로','이나','거나',
+      '어떻게','왜','뭐','뭔지','뭐야','무엇','어떤','어디','언제','얼마나','알려줘','알려',
+      '하는','되는','있는','이런','저런','그런','같은','다른','대해','관해',
+      '거','것','수','때','중','등','및','보통','써','정해','생성돼','경우','함','된다','역할',
+      '에서','에게','부터','까지','마다','처럼','보다','수는','란','이란','라는',
+      '정확히','무슨','일을','관계','관계야','나오는','나눠','나누면','뭐가','좋아','쓰던데',
+      '이게','이거','거야','서로','또','정말','그냥','좀','필요해','모델은','학습돼','루트',
+      '실제로','계산하는','안의','여러','동시에','위해서예요','건','더','많이','각','높은',
+      'is','are','the','a','an','of','to','for','with','by','as','what','how','and','or','in','on']);
+    const tokens = (text.toLowerCase().match(/[a-z0-9_\-]+|[가-힣]+/g) || []);
+    const seen = new Set(); const out = [];
+    for (const t of tokens) {
+      if (t.length > 1 && !stop.has(t) && !seen.has(t)) { seen.add(t); out.push(t); if (out.length >= (n||3)) break; }
+    }
+    return out;
+  }
+  function similarity(a, b) { const s = new Set(b); return a.filter(k => s.has(k)).length; }
+
+  // ─── 대화 노드 ─────────────────────────────────────────
+  const W = () => document.getElementById('map-svg').clientWidth || 420;
+  const H = () => document.getElementById('map-svg').clientHeight || 400;
+
+  function addConvo(q, a, msgIndex) {
+    convoCounter++;
+    const id = 'c' + convoCounter;
+    const keywords = extractKeywords(q + ' ' + a.slice(0, 80), 3);
+    const node = {
+      id, q, a, keywords, msgIndex,
+      x: W()/2 + (Math.random()-0.5)*80,
+      y: H()/2 + (Math.random()-0.5)*80,
+      vx: 0, vy: 0, pinned: false,
+    };
+    convos.push(node);
+    convoById[id] = node;
+    if (!firstId) firstId = id;
+    lastId = id;
+    rebuildAutoEdges();
+    layoutDone = false;   // 새 대화 → 레이아웃 다시 계산
+    return node;
+  }
+
+  function rebuildAutoEdges() {
+    // 자동 선은 긋지 않는다 (군집 배치로 유사성을 표현, 선은 사용자만)
+    // 사용자가 만든 엣지만 유지
+    edges = edges.filter(e => e.userMade);
+  }
+  function sameEdge(e, a, b) { return (e.a===a&&e.b===b)||(e.a===b&&e.b===a); }
+
+  // ─── 배치 (자동 군집화 없음 — 비슷한 건 가까이 끌되 묶지는 않음) ──
+  // 레이아웃을 한 번만 계산하기 위한 플래그 (드래그 시 재계산 방지)
+  let layoutDone = false;
+
+  // 모든 노드를 한 번에 force로 배치: 비슷한 키워드끼리 가까이, 전체는 퍼지게.
+  // 묶음(그룹)은 만들지 않는다 — 그룹은 사용자가 올가미로.
+  function layoutClusters() {
+    const w = W(), h = H(), pad = 50, cx = w/2, cy = h/2;
+    // 초기 위치: 핀 안 된 노드만 중앙 근처 랜덤
+    convos.forEach(nd => {
+      if (!nd.pinned && nd.x == null) { nd.x = cx + (Math.random()-0.5)*120; nd.y = cy + (Math.random()-0.5)*120; }
+    });
+    // force 반복
+    const REP = 3000, SPRING = 0.02, CENTER = 0.012, DAMP = 0.85;
+    for (let step = 0; step < 300; step++) {
+      convos.forEach(nd => { nd.vx = nd.vx||0; nd.vy = nd.vy||0; });
+      // 반발 (모든 쌍이 서로 밀어냄 → 안 겹침). 단 유사한 쌍은 덜 밀어냄.
+      for (let i=0;i<convos.length;i++) for (let j=i+1;j<convos.length;j++) {
+        const A=convos[i], B=convos[j];
+        let dx=A.x-B.x, dy=A.y-B.y, d=Math.sqrt(dx*dx+dy*dy)||0.1;
+        const sim = similarity(A.keywords, B.keywords);
+        const repScale = sim >= 1 ? 0.5 : 1;   // 비슷하면 반발 약하게(밀착) 하되 글씨 겹침 방지 위해 0.5
+        const f=REP*repScale/(d*d), fx=dx/d*f, fy=dy/d*f;
+        if(!A.pinned){A.vx+=fx;A.vy+=fy;} if(!B.pinned){B.vx-=fx;B.vy-=fy;}
+      }
+      // 인력 (유사도 높은 쌍끼리만 살짝 당김 → 비슷한 건 가까이)
+      for (let i=0;i<convos.length;i++) for (let j=i+1;j<convos.length;j++) {
+        const sim = similarity(convos[i].keywords, convos[j].keywords);
+        if (sim < 1) continue;
+        const A=convos[i], B=convos[j];
+        let dx=B.x-A.x, dy=B.y-A.y, d=Math.sqrt(dx*dx+dy*dy)||0.1;
+        const target = 58 - sim*6;           // sim1=52, sim2=46, sim3=40 (밀착하되 키워드 안 겹침)
+        const f=(d-target)*SPRING*2.0*sim, fx=dx/d*f, fy=dy/d*f;   // 인력
+        if(!A.pinned){A.vx+=fx;A.vy+=fy;} if(!B.pinned){B.vx-=fx;B.vy-=fy;}
+      }
+      convos.forEach(nd => {
+        if (nd.pinned) return;
+        nd.vx += (cx-nd.x)*CENTER; nd.vy += (cy-nd.y)*CENTER;
+        nd.vx *= DAMP; nd.vy *= DAMP; nd.x += nd.vx; nd.y += nd.vy;
+        const r = radiusOf();
+        nd.x = Math.max(pad+r, Math.min(w-pad-r, nd.x));
+        nd.y = Math.max(pad+r, Math.min(h-pad-r, nd.y));
+      });
+    }
+  }
+
+  // ─── force 시뮬레이션 (1회 안정화 후 고정) ─────────────
+  function radiusOf() { return 13; }
+
+  function runSimulation(steps) {
+    const REPULSION = 2600, SPRING = 0.025, SPRING_LEN = 64, CENTER = 0.015, DAMP = 0.85;
+    const w = W(), h = H(), pad = 30;
+    for (let s = 0; s < steps; s++) {
+      for (let i = 0; i < convos.length; i++) {
+        for (let j = i+1; j < convos.length; j++) {
+          const A = convos[i], B = convos[j];
+          let dx = A.x-B.x, dy = A.y-B.y, d = Math.sqrt(dx*dx+dy*dy)||0.1;
+          const f = REPULSION/(d*d), fx = dx/d*f, fy = dy/d*f;
+          if (!A.pinned){A.vx+=fx;A.vy+=fy;} if (!B.pinned){B.vx-=fx;B.vy-=fy;}
+        }
+      }
+      for (const e of edges) {
+        const A = convoById[e.a], B = convoById[e.b]; if (!A||!B) continue;
+        let dx = B.x-A.x, dy = B.y-A.y, d = Math.sqrt(dx*dx+dy*dy)||0.1;
+        const pull = e.userMade ? 1 : (e.pull || 0.5);
+        const f = (d-SPRING_LEN)*SPRING*pull, fx = dx/d*f, fy = dy/d*f;
+        if (!A.pinned){A.vx+=fx;A.vy+=fy;} if (!B.pinned){B.vx-=fx;B.vy-=fy;}
+      }
+      const cx = w/2, cy = h/2;
+      for (const nd of convos) {
+        if (nd.pinned) continue;
+        nd.vx += (cx-nd.x)*CENTER; nd.vy += (cy-nd.y)*CENTER;
+        nd.vx *= DAMP; nd.vy *= DAMP;
+        nd.x += nd.vx; nd.y += nd.vy;
+        const r = radiusOf();
+        nd.x = Math.max(pad+r, Math.min(w-pad-r, nd.x));
+        nd.y = Math.max(pad+r, Math.min(h-pad-r, nd.y));
+      }
+    }
+  }
+
+  // ─── 렌더 ──────────────────────────────────────────────
+  function renderMap() {
+    const svg = document.getElementById('map-svg');
+    const empty = document.getElementById('map-empty');
+    if (convos.length === 0) { empty.style.display = 'flex'; svg.innerHTML = ''; return; }
+    empty.style.display = 'none';
+
+    // 레이아웃은 최초 1회만 계산 (이후엔 저장된 좌표·배경 사용 → 드래그해도 배경 고정)
+    if (!layoutDone) {
+      layoutClusters();
+      layoutDone = true;
+    }
+
+    let s = '';
+
+    // 사용자가 올가미로 만든 그룹 배경 (노드들을 감싸는 원형 영역 + 이름)
+    for (const g of userGroups) {
+      const members = g.nodeIds.map(id => convoById[id]).filter(Boolean);
+      if (members.length === 0) continue;
+      let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+      members.forEach(nd => { minx=Math.min(minx,nd.x); miny=Math.min(miny,nd.y); maxx=Math.max(maxx,nd.x); maxy=Math.max(maxy,nd.y); });
+      const r = radiusOf(), padg = 30;
+      const cx = (minx+maxx)/2, cy = (miny+maxy)/2;
+      // 노드들을 충분히 감싸는 타원 반지름 (키워드 라벨까지 고려)
+      const rx = (maxx-minx)/2 + r + padg;
+      const ry = (maxy-miny)/2 + r + padg + 6;
+      // 이름은 타원 위쪽 경계에
+      const nameX = cx - rx + 16, nameY = cy - ry + 18;
+      s += `<g class="user-group" data-gid="${g.id}">
+        <ellipse class="group-bg" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}"></ellipse>
+        <text class="group-name" data-gid="${g.id}" x="${nameX.toFixed(1)}" y="${nameY.toFixed(1)}">${escapeHtml(g.name)}</text>
+      </g>`;
+    }
+
+    // 사용자 연결 선
+    for (const e of edges) {
+      if (!e.userMade) continue;
+      const A = convoById[e.a], B = convoById[e.b]; if (!A||!B) continue;
+      s += `<line class="map-edge user-made" x1="${A.x.toFixed(1)}" y1="${A.y.toFixed(1)}" x2="${B.x.toFixed(1)}" y2="${B.y.toFixed(1)}" />`;
+    }
+
+    // 노드 (원 + 원 아래 풀 키워드)
+    const r = radiusOf();
+    for (const nd of convos) {
+      const isFirst = nd.id === firstId, isLast = nd.id === lastId;
+      const sel = nd.id === selectedId;
+      const cls = ['map-node'];
+      if (sel) cls.push('selected');
+      if (isFirst) cls.push('first');
+      if (isLast) cls.push('recent');
+      const kw = nd.keywords[0] || '';
+      s += `<g class="${cls.join(' ')}" data-id="${nd.id}" transform="translate(${nd.x.toFixed(1)},${nd.y.toFixed(1)})">
+        <circle r="${r}"></circle>
+        <text class="kw" text-anchor="middle" dy="${r+13}">${escapeHtml(kw)}</text>`;
+      if (isFirst || isLast) {
+        const label = isFirst ? '첫 대화' : '최근 대화';
+        s += `<text class="anchor-label" text-anchor="middle" dy="${-r-7}">${label}</text>`;
+      }
+      s += `</g>`;
+    }
+    svg.innerHTML = s;
+    attachNodeHandlers();
+  }
+
+  // ─── 노드 이벤트 ───────────────────────────────────────
+  function attachNodeHandlers() {
+    document.querySelectorAll('.map-node').forEach(g => {
+      const id = g.dataset.id;
+      g.addEventListener('mousedown', (e) => onNodeMouseDown(e, id));
+      g.addEventListener('mouseenter', (e) => onNodeHover(e, id));
+      g.addEventListener('mouseleave', hideDetail);
+      g.addEventListener('dblclick', (e) => { e.stopPropagation(); openKwEditor(id); });
+    });
+  }
+
+  let dragId = null, dragMoved = false, dragOffset = {x:0,y:0};
+  function svgPoint(evt) {
+    const svg = document.getElementById('map-svg');
+    const rect = svg.getBoundingClientRect();
+    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+  }
+  function onNodeMouseDown(e, id) {
+    e.preventDefault();
+    if (lassoMode) return;   // 올가미 모드 중엔 노드 드래그 안 함 (올가미 그리기 우선)
+    if (connectMode) {
+      if (!connectFromId) { connectFromId = id; }
+      else if (connectFromId !== id) {
+        if (!edges.some(ed => sameEdge(ed, connectFromId, id))) edges.push({ a: connectFromId, b: id, userMade: true });
+        connectFromId = null; setConnectMode(false); renderMap();
+      }
+      return;
+    }
+    dragId = id; dragMoved = false;
+    const nd = convoById[id]; const p = svgPoint(e);
+    dragOffset = { x: p.x - nd.x, y: p.y - nd.y };
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', onDragUp);
+  }
+  function onDragMove(e) {
+    if (!dragId) return;
+    dragMoved = true;
+    const nd = convoById[dragId]; const p = svgPoint(e);
+    nd.x = p.x - dragOffset.x; nd.y = p.y - dragOffset.y; nd.pinned = true;
+    renderMap();
+  }
+  function onDragUp() {
+    if (dragId && !dragMoved) { scrollToConvo(dragId); }
+    dragId = null;
+    document.removeEventListener('mousemove', onDragMove);
+    document.removeEventListener('mouseup', onDragUp);
+  }
+
+  // 원 클릭 → 좌측 채팅의 해당 대화로 스크롤 + 잠깐 강조
+  function scrollToConvo(id) {
+    const nd = convoById[id]; if (!nd) return;
+    const el = document.getElementById('qa-' + nd.msgIndex);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1500);
+  }
+  function onCanvasMouseMove(e) {
+    if (!connectMode || !connectFromId) return;
+    const from = convoById[connectFromId]; const p = svgPoint(e);
+    let temp = document.getElementById('temp-edge');
+    const svg = document.getElementById('map-svg');
+    if (!temp) { temp = document.createElementNS('http://www.w3.org/2000/svg','line'); temp.id='temp-edge'; temp.setAttribute('class','map-edge-temp'); svg.appendChild(temp); }
+    temp.setAttribute('x1', from.x); temp.setAttribute('y1', from.y); temp.setAttribute('x2', p.x); temp.setAttribute('y2', p.y);
+  }
+
+  // ─── 키워드 수정 ───────────────────────────────────────
+  function openKwEditor(id) {
+    const nd = convoById[id];
+    const wrap = document.getElementById('map-canvas-wrap');
+    const input = document.createElement('input');
+    input.className = 'kw-editor'; input.value = nd.keywords[0] || '';
+    input.style.left = nd.x + 'px'; input.style.top = nd.y + 'px';
+    wrap.appendChild(input); input.focus(); input.select();
+    let done = false;
+    const commit = () => { if (done) return; done = true; const v = input.value.trim(); if (v) nd.keywords[0] = v; if (input.parentNode) input.remove(); renderMap(); };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (ev) => { if (ev.key==='Enter'){ev.preventDefault();commit();} if (ev.key==='Escape'){done=true;if(input.parentNode)input.remove();} });
+  }
+
+  // ─── 호버 카드 ─────────────────────────────────────────
+  function onNodeHover(e, id) {
+    if (dragId || connectMode) return;
+    const nd = convoById[id]; if (!nd) return;
+    const card = document.getElementById('detail-card');
+    const convoNum = convos.findIndex(c => c.id === id) + 1;  // 대화 N
+    let tag = `대화 ${convoNum} · ` + nd.keywords.join(' · ');
+    if (id === firstId) tag = `대화 ${convoNum} · 첫 대화 · ` + nd.keywords.join(' · ');
+    else if (id === lastId) tag = `대화 ${convoNum} · 최근 대화 · ` + nd.keywords.join(' · ');
+    document.getElementById('dc-tag').textContent = tag;
+    document.getElementById('dc-q').textContent = nd.q;
+    document.getElementById('dc-preview').textContent = nd.a.slice(0,100) + (nd.a.length>100?'…':'');
+    const rect = e.currentTarget.getBoundingClientRect();
+    card.style.left = Math.max(10, rect.left - 270) + 'px';
+    card.style.top = Math.max(10, rect.top - 30) + 'px';
+    card.classList.add('visible');
+  }
+  function hideDetail() { document.getElementById('detail-card').classList.remove('visible'); }
+
+  // ─── 연결 모드 ─────────────────────────────────────────
+  function setConnectMode(on) {
+    connectMode = on;
+    if (!on) { connectFromId = null; const t = document.getElementById('temp-edge'); if (t) t.remove(); }
+    document.getElementById('connect-tool').classList.toggle('active', on);
+    document.getElementById('map-svg').classList.toggle('connecting', on);
+  }
+
+  // ─── 올가미(그룹) 모드 ─────────────────────────────────
+  function setLassoMode(on) {
+    lassoMode = on;
+    lassoPts = [];
+    if (on && connectMode) setConnectMode(false);
+    document.getElementById('group-tool').classList.toggle('active', on);
+    document.getElementById('map-svg').classList.toggle('lasso', on);
+    const t = document.getElementById('lasso-path'); if (t) t.remove();
+    if (on) flashMapHint('묶을 노드들을 빙 둘러 감싸고 시작점으로 돌아오세요');
+  }
+
+  let lassoDrawing = false;
+  function onLassoMouseDown(e) {
+    if (!lassoMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    lassoDrawing = true;
+    lassoPts = [svgPoint(e)];
+    drawLasso(false);
+    document.addEventListener('mousemove', onLassoMove);
+    document.addEventListener('mouseup', onLassoUp);
+  }
+  function onLassoMove(e) {
+    if (!lassoMode || !lassoDrawing) return;
+    const p = svgPoint(e);
+    lassoPts.push(p);
+    // 시작점 근처로 돌아오면(끝과 끝이 이어지면) 닫힌 것으로 간주
+    const start = lassoPts[0];
+    const near = lassoPts.length > 8 && Math.hypot(p.x-start.x, p.y-start.y) < 24;
+    drawLasso(near);
+  }
+  function drawLasso(closing) {
+    const svg = document.getElementById('map-svg');
+    let path = document.getElementById('lasso-path');
+    if (!path) { path = document.createElementNS('http://www.w3.org/2000/svg','path'); path.id='lasso-path'; path.setAttribute('class','lasso-path'); svg.appendChild(path); }
+    if (lassoPts.length < 2) { path.setAttribute('d',''); return; }
+    let d = `M ${lassoPts[0].x.toFixed(1)} ${lassoPts[0].y.toFixed(1)}`;
+    for (let i=1;i<lassoPts.length;i++) d += ` L ${lassoPts[i].x.toFixed(1)} ${lassoPts[i].y.toFixed(1)}`;
+    if (closing) d += ' Z';
+    path.setAttribute('d', d);
+    path.classList.toggle('closing', !!closing);
+  }
+  function onLassoUp() {
+    document.removeEventListener('mousemove', onLassoMove);
+    document.removeEventListener('mouseup', onLassoUp);
+    lassoDrawing = false;
+    // 잔상 제거 (반드시 지움)
+    const path = document.getElementById('lasso-path'); if (path) path.remove();
+
+    // 그린 곡선이 충분하면 닫힌 영역으로 보고 내부 노드 선택
+    let inside = [];
+    if (lassoPts.length >= 3) {
+      inside = convos.filter(nd => pointInPolygon(nd.x, nd.y, lassoPts));
+    }
+    const pts = lassoPts.slice();
+    lassoPts = [];
+
+    if (inside.length >= 2) {
+      groupCounter++;
+      const gid = 'g'+groupCounter;
+      userGroups.push({ id: gid, name: `그룹 ${groupCounter}`, nodeIds: inside.map(n=>n.id) });
+      setLassoMode(false);
+      renderMap();
+      openGroupNameEditor(gid);   // 생성 직후 이름 인라인 편집
+    } else {
+      // 노드를 2개 이상 못 감쌌으면 — 올가미 모드 유지하고 다시 시도 안내
+      renderMap();
+      // 모드는 유지 (group-tool active 유지). 안내만.
+      flashMapHint(inside.length === 1 ? '노드를 2개 이상 감싸야 그룹이 됩니다' : '노드를 감싸도록 다시 그려주세요');
+    }
+  }
+
+  function flashMapHint(msg) {
+    let el = document.getElementById('map-flash');
+    if (!el) {
+      el = document.createElement('div'); el.id = 'map-flash';
+      el.style.cssText = 'position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;font-family:Söhne,system-ui,sans-serif;font-size:11px;padding:6px 12px;border-radius:8px;z-index:60;pointer-events:none;transition:opacity 0.3s;';
+      document.getElementById('map-canvas-wrap').appendChild(el);
+    }
+    el.textContent = msg; el.style.opacity = '1';
+    clearTimeout(el._t); el._t = setTimeout(()=>{ el.style.opacity='0'; }, 1800);
+  }
+
+  // 점이 다각형 안에 있는지 (ray casting)
+  function pointInPolygon(x, y, poly) {
+    if (poly.length < 3) return false;
+    let inside = false;
+    for (let i=0, j=poly.length-1; i<poly.length; j=i++) {
+      const xi=poly[i].x, yi=poly[i].y, xj=poly[j].x, yj=poly[j].y;
+      const intersect = ((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+  function dissolveGroup(gid) {
+    userGroups = userGroups.filter(g => g.id !== gid);
+    renderMap();
+  }
+
+  // 그룹 이름을 그룹 위에서 바로 편집 (팝업 대신 인라인)
+  function openGroupNameEditor(gid) {
+    const g = userGroups.find(x => x.id === gid); if (!g) return;
+    const members = g.nodeIds.map(id => convoById[id]).filter(Boolean);
+    if (members.length === 0) return;
+    let minx=1e9,miny=1e9;
+    members.forEach(nd => { minx=Math.min(minx,nd.x); miny=Math.min(miny,nd.y); });
+    const r = radiusOf(), padg = 22;
+    const x = minx - r - padg, y = miny - r - padg - 8;
+    const wrap = document.getElementById('map-canvas-wrap');
+    const input = document.createElement('input');
+    input.className = 'group-name-editor';
+    input.value = g.name;
+    input.placeholder = '비우면 그룹 해제';
+    input.style.left = (x + 12) + 'px';
+    input.style.top = (y + 8) + 'px';
+    wrap.appendChild(input);
+    input.focus(); input.select();
+    let done = false;
+    const commit = () => {
+      if (done) return; done = true;
+      const v = input.value.trim();
+      if (input.parentNode) input.remove();
+      if (v === '') { dissolveGroup(gid); return; }  // 이름 비우면 그룹 해제
+      g.name = v;
+      renderMap();
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key==='Enter') { ev.preventDefault(); commit(); }
+      if (ev.key==='Escape') { done = true; if (input.parentNode) input.remove(); }
+    });
+  }
+
+  // ─── 채팅 렌더 ─────────────────────────────────────────
+  function addQAPair(q, idx) {
+    const wrap = document.getElementById('messages');
+    const div = document.createElement('div');
+    div.className = 'qa-pair appearing'; div.id = 'qa-' + idx;
+    div.innerHTML = `
+      <div class="qa-box">
+        <div class="qa-tag">대화 ${idx+1}</div>
+        <div class="msg user"><div class="role">나</div><div class="bubble">${escapeHtml(q)}</div></div>
+        <div class="msg assistant"><div class="role">Claude</div><div class="bubble" id="qa-a-${idx}"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>
+      </div>`;
+    wrap.appendChild(div); scrollBottom();
+  }
+  function fillAnswer(idx, a) { const el = document.getElementById('qa-a-'+idx); if (el) el.innerHTML = escapeHtml(a); scrollBottom(); }
+  function scrollBottom() { const m = document.getElementById('messages'); m.scrollTop = m.scrollHeight; }
+
+  // ─── 입력 → 진짜 Claude 호출 → 지도 반영 ────────────────
+  let transitioned = false;
+  let busy = false;
+
+  function toChat() {
+    const home = document.getElementById('home-screen');
+    const chat = document.getElementById('chat-mode');
+    const ci = document.getElementById('chat-input-inner');
+    const hi = document.getElementById('home-input-inner');
+    while (hi.firstChild) ci.appendChild(hi.firstChild);
+    home.classList.add('hidden'); chat.classList.add('active');
+  }
+
+  async function userSubmit() {
+    const input = document.getElementById('input');
+    const q = input.value.trim();
+    if (!q || busy) return;
+    busy = true;
+    if (!transitioned) { toChat(); transitioned = true; }
+    const idx = convoCounter;            // 이 대화의 인덱스
+    addQAPair(q, idx);                    // 질문 + 답변 자리(로딩) 추가
+    input.value = ''; autoResize(input);
+
+    let answer = '';
+    try {
+      // 진짜 Claude 호출 (claude.ai 아티팩트 환경에서 동작)
+      const prompt = `당신은 사용자의 학습을 돕는 친절한 AI입니다. 사용자가 논문이나 기술 문서를 이해하려고 질문합니다. 핵심을 짚어 2~4문장으로 간결하게, 한국어로 답하세요.\n\n질문: ${q}`;
+      answer = await window.claude.complete(prompt);
+      if (!answer || !answer.trim()) answer = '(답변을 받지 못했어요. 다시 시도해 주세요.)';
+    } catch (e) {
+      // 아티팩트 환경이 아니거나 호출 실패 시 안내
+      answer = '⚠️ 이 기능은 claude.ai에 게시된 아티팩트에서만 작동해요. (window.claude.complete 미지원 환경)';
+    }
+
+    fillAnswer(idx, answer);
+    addConvo(q, answer, idx);            // 지도에 노드 추가 (키워드 추출은 기존 방식)
+    flagUpdate();
+    if (document.getElementById('map-panel').classList.contains('open')) renderMap();
+    busy = false;
+  }
+
+  // ─── 지도 패널 토글 ────────────────────────────────────
+  function togglePanel() {
+    const p = document.getElementById('map-panel');
+    const btn = document.getElementById('map-toggle-btn');
+    if (p.classList.contains('open')) { p.classList.remove('open'); btn.classList.remove('active'); }
+    else {
+      p.classList.add('open'); btn.classList.add('active'); btn.classList.remove('has-update');
+      setTimeout(renderMap, 300);
+    }
+  }
+  function flagUpdate() {
+    const p = document.getElementById('map-panel');
+    if (!p.classList.contains('open')) document.getElementById('map-toggle-btn').classList.add('has-update');
+  }
+
+  // ─── 유틸 ──────────────────────────────────────────────
+  function wait(ms){return new Promise(r=>setTimeout(r,ms));}
+  function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function autoResize(t){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,200)+'px';}
+
+  // ─── 이벤트 바인딩 ─────────────────────────────────────
+  document.getElementById('input').addEventListener('input', e=>autoResize(e.target));
+  document.getElementById('map-toggle-btn').addEventListener('click', togglePanel);
+  document.getElementById('map-panel-close').addEventListener('click', togglePanel);
+  document.getElementById('connect-tool').addEventListener('click', () => setConnectMode(!connectMode));
+  document.getElementById('group-tool').addEventListener('click', () => setLassoMode(!lassoMode));
+  document.getElementById('map-svg').addEventListener('mousemove', onCanvasMouseMove);
+  document.getElementById('map-svg').addEventListener('mousedown', onLassoMouseDown, true);
+  // 그룹 이름 클릭 → 인라인 편집/해제
+  document.getElementById('map-svg').addEventListener('click', (e) => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains('group-name')) {
+      const gid = t.getAttribute('data-gid');
+      if (gid) openGroupNameEditor(gid);
+    }
+  });
+  document.getElementById('send').addEventListener('click', userSubmit);
+  document.addEventListener('keydown', e => {
+    if (e.target.id !== 'input') return;
+    if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); userSubmit(); }
+  });
+</script>
+</body>
+</html>
