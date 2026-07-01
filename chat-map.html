@@ -169,6 +169,18 @@
   .msg.user .bubble { color: var(--text); }
   .msg.assistant .bubble { color: var(--text-soft); }
 
+  /* 답변 실패 안내 (로그인/구독 필요 등) */
+  .answer-error { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .answer-error-text { font-size: 14px; line-height: 1.6; color: var(--text-faint); }
+  .answer-error-text a { color: var(--accent); text-decoration: underline; }
+  .retry-btn {
+    font-family: 'Söhne', system-ui, sans-serif; font-size: 12px; font-weight: 600;
+    background: transparent; border: 1px solid var(--accent-faint); color: var(--accent);
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; transition: background 0.15s;
+  }
+  .retry-btn:hover { background: var(--accent-soft); }
+  .retry-btn:disabled { opacity: 0.5; cursor: default; }
+
   .input-area-chat { padding: 12px 0 24px; background: var(--bg); flex-shrink: 0; }
 
   /* 입력창 위 툴바 (지도 토글 위치) */
@@ -900,6 +912,7 @@
   }
 
   // ─── 채팅 렌더 ─────────────────────────────────────────
+  function dotsHtml() { return '<div class="typing-dots"><span></span><span></span><span></span></div>'; }
   function addQAPair(q, idx) {
     const wrap = document.getElementById('messages');
     const div = document.createElement('div');
@@ -908,7 +921,7 @@
       <div class="qa-box">
         <div class="qa-tag">대화 ${idx+1}</div>
         <div class="msg user"><div class="role">나</div><div class="bubble">${escapeHtml(q)}</div></div>
-        <div class="msg assistant"><div class="role">Claude</div><div class="bubble" id="qa-a-${idx}"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>
+        <div class="msg assistant"><div class="role">Claude</div><div class="bubble" id="qa-a-${idx}">${dotsHtml()}</div></div>
       </div>`;
     wrap.appendChild(div); scrollBottom();
   }
@@ -918,6 +931,8 @@
   // ─── 입력 → 진짜 Claude 호출 → 지도 반영 ────────────────
   let transitioned = false;
   let busy = false;
+  const pendingQuestions = {};   // idx → 질문 텍스트 (재시도용)
+  const ANSWER_TIMEOUT_MS = 15000;
 
   function toChat() {
     const home = document.getElementById('home-screen');
@@ -928,32 +943,64 @@
     home.classList.add('hidden'); chat.classList.add('active');
   }
 
+  function callClaudeWithTimeout(prompt, ms) {
+    return Promise.race([
+      window.claude.complete(prompt),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+    ]);
+  }
+
+  function showAnswerError(idx) {
+    const el = document.getElementById('qa-a-' + idx);
+    if (!el) return;
+    el.innerHTML = `
+      <div class="answer-error">
+        <span class="answer-error-text">답변을 받아오지 못했어요. Claude 계정으로 로그인되어 있는지 확인한 뒤 다시 시도해주세요.</span>
+        <button class="retry-btn" data-idx="${idx}">다시 시도</button>
+      </div>`;
+    scrollBottom();
+  }
+
+  async function requestAnswer(idx) {
+    const q = pendingQuestions[idx];
+    if (q == null) return;
+    busy = true;
+    try {
+      if (!window.claude || typeof window.claude.complete !== 'function') throw new Error('no-window-claude');
+      // 진짜 Claude 호출 (claude.ai 아티팩트 환경에서, 방문자 본인의 로그인 세션으로 동작)
+      const prompt = `당신은 사용자의 학습을 돕는 친절한 AI입니다. 사용자가 논문이나 기술 문서를 이해하려고 질문합니다. 핵심을 짚어 2~4문장으로 간결하게, 한국어로 답하세요.\n\n질문: ${q}`;
+      const answer = await callClaudeWithTimeout(prompt, ANSWER_TIMEOUT_MS);
+      if (!answer || !answer.trim()) throw new Error('empty-answer');
+
+      fillAnswer(idx, answer);
+      addConvo(q, answer, idx);          // 지도에 노드 추가 (키워드 추출은 기존 방식)
+      flagUpdate();
+      if (document.getElementById('map-panel').classList.contains('open')) renderMap();
+      delete pendingQuestions[idx];
+    } catch (e) {
+      // 로그인이 안 되어 있거나, 응답이 15초 내에 오지 않는 등 실패한 경우
+      showAnswerError(idx);              // 질문은 pendingQuestions에 남겨 재시도 가능하게 유지
+    }
+    busy = false;
+  }
+
   async function userSubmit() {
     const input = document.getElementById('input');
     const q = input.value.trim();
     if (!q || busy) return;
-    busy = true;
     if (!transitioned) { toChat(); transitioned = true; }
     const idx = convoCounter;            // 이 대화의 인덱스
     addQAPair(q, idx);                    // 질문 + 답변 자리(로딩) 추가
+    pendingQuestions[idx] = q;
     input.value = ''; autoResize(input);
+    await requestAnswer(idx);
+  }
 
-    let answer = '';
-    try {
-      // 진짜 Claude 호출 (claude.ai 아티팩트 환경에서 동작)
-      const prompt = `당신은 사용자의 학습을 돕는 친절한 AI입니다. 사용자가 논문이나 기술 문서를 이해하려고 질문합니다. 핵심을 짚어 2~4문장으로 간결하게, 한국어로 답하세요.\n\n질문: ${q}`;
-      answer = await window.claude.complete(prompt);
-      if (!answer || !answer.trim()) answer = '(답변을 받지 못했어요. 다시 시도해 주세요.)';
-    } catch (e) {
-      // 아티팩트 환경이 아니거나 호출 실패 시 안내
-      answer = '⚠️ 이 기능은 claude.ai에 게시된 아티팩트에서만 작동해요. (window.claude.complete 미지원 환경)';
-    }
-
-    fillAnswer(idx, answer);
-    addConvo(q, answer, idx);            // 지도에 노드 추가 (키워드 추출은 기존 방식)
-    flagUpdate();
-    if (document.getElementById('map-panel').classList.contains('open')) renderMap();
-    busy = false;
+  function retryAnswer(idx) {
+    if (busy || pendingQuestions[idx] == null) return;
+    const el = document.getElementById('qa-a-' + idx);
+    if (el) el.innerHTML = dotsHtml();
+    requestAnswer(idx);
   }
 
   // ─── 지도 패널 토글 ────────────────────────────────────
@@ -993,6 +1040,11 @@
     }
   });
   document.getElementById('send').addEventListener('click', userSubmit);
+  // 답변 실패 후 "다시 시도" 버튼 (동적으로 추가되므로 위임 방식으로 바인딩)
+  document.getElementById('messages').addEventListener('click', (e) => {
+    const btn = e.target.closest('.retry-btn');
+    if (btn) retryAnswer(Number(btn.dataset.idx));
+  });
   document.addEventListener('keydown', e => {
     if (e.target.id !== 'input') return;
     if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); userSubmit(); }
